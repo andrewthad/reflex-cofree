@@ -20,10 +20,37 @@ import Control.Comonad.Trans.Cofree (CofreeT(..))
 import qualified Control.Comonad.Trans.Cofree as CT
 import qualified Data.Map as Map
 
+------------------------
+-- The goals of this code are:
+--
+-- 1. Present the syntax tree of a toy language.
+-- 2. Present per-node annotations
+--
+-- The first goal has already been accomplished. The approach
+-- is adopted from the Cofree technique outlined in Brian Mckenna's
+-- blog post: https://brianmckenna.org/blog/type_annotation_cofree
+--
+-- The notable difference is the syntax trees Brian generates are
+-- pure. Here, we use CofreeT to add in a layer that includes reflex-dom's
+-- MonadWidget and reflex's Dynamic. The DynamicM type defined in this
+-- module simply compose these two, which gives us dynamic with a
+-- Monad instance. If you build this code, you can play around with
+-- building a syntax tree for the toy language in your browser.
+--
+-- Here's what doesn't work: annotating the view of the tree. This
+-- is done with memoExtendCofreeT. Right now, the code does a simple
+-- calucalation of the size of the tree. While it correctly calculates
+-- these sizes for each node, they are displayed in the wrong place in
+-- the browser. I would expect them to be interleaved with the tree,
+-- but they all show up at the bottom.
+--
+-- I would be grateful if anyone can show me how to correct this. Thanks.
+--
+------------------------
+
 main :: IO ()
 main = mainWidget $ do
   el "h1" $ text "Hello Reflex!"
-  -- renderFixedWidget $ fixWidgetDynamicNew widgetFunctor2
   _ <- getDynamicM
      $ cofreeCataT (\_ _ -> DynamicM $ text "YO!" >> return (constDyn ()))
      $ memoExtendCofreeT
@@ -33,7 +60,7 @@ main = mainWidget $ do
                          return (constDyn r)
          )
      $ fixToCofreeT
-     $ altFixDyn widgetFunctor2
+     $ altFixDyn displayAst
   return ()
 
 newtype DynamicM t m a = DynamicM { getDynamicM :: m (Dynamic t a) }
@@ -105,10 +132,10 @@ listItem, unorderedList :: String
 listItem = "li"
 unorderedList = "ul"
 
-widgetFunctor2 :: MonadWidget t m
+displayAst :: MonadWidget t m
   => m (Dynamic t a)
   -> m (Dynamic t (Ast a))
-widgetFunctor2 x = do
+displayAst x = do
   d1 <- dropdown CNumber (constDyn $ Map.fromList $ flip map allAstCons $ \a -> (a, show a)) def
   let dynAstCons = _dropdown_value d1
   el unorderedList $ fmap joinDyn $ (widgetDyn =<<) $ forDyn dynAstCons $ \a -> case a of
@@ -145,14 +172,9 @@ altFixDyn :: (MonadWidget t m, Functor f)
   -> Fix (Compose (DynamicM t m) f)
 altFixDyn f = id
   $ Fix $ Compose
-  $ (fmap . fmap) mkFixWidget2
+  $ (fmap . fmap) (Fix . Compose . DynamicM . return . constDyn)
   $ DynamicM
   $ f (getDynamicM $ getCompose $ unFix $ altFixDyn f)
-
-mkFixWidget2 :: (MonadWidget t m, Functor f)
-  => f (Fix (Compose (DynamicM t m) f))
-  -> Fix (Compose (DynamicM t m) f)
-mkFixWidget2 = Fix . Compose . DynamicM . return . constDyn
 
 widgetDyn :: MonadWidget t m => Dynamic t (m a) -> m (Dynamic t a)
 widgetDyn d = do
@@ -167,11 +189,25 @@ widgetDyn d = do
 --
 --   This means that it does not have to reevaluate the entire
 --   tree each time it calculates the new annotation for a node.
+--
+--   Another way of looking at it is that it is very similar to
+--   `cofreeCata`, defined further down. The difference is that
+--   it preserves the tree.
 memoExtend :: Functor f => (b -> f a -> a) -> Cofree f b -> Cofree f a
 memoExtend f (b :< cs) =
   let fca = fmap (memoExtend f) cs
    in f b (fmap extract fca) :< fca
 
+-- | This is like memoExtend but for CofreeT. It is similar to
+-- `cofreeCataT`, defined further down. Note that there is no
+-- analogue with `extend` any more because `extend` no longer
+-- makes sense in the presence of monadic effects. To get a better
+-- picture of what I mean, try writing what `extend` would be
+-- for CofreeT:
+--
+--     extendCofreeT :: (CofreeT f w a -> w b) -> CofreeT f w a -> CofreeT f w b
+--
+-- Such a function has no meaningful definition.
 memoExtendCofreeT :: (Monad w, Traversable f)
   => (b -> f a -> w a) -> CofreeT f w b -> CofreeT f w a
 memoExtendCofreeT f (CofreeT w) = CofreeT $ do
@@ -190,6 +226,9 @@ fixToCofreeT (Fix (Compose w)) =
 
 newtype Fix f = Fix { unFix :: f (Fix f) }
 
+cofreeCata :: Functor f => (b -> f a -> a) -> Cofree f b -> a
+cofreeCata f x = f (extract x) $ fmap (cofreeCata f) $ unwrap x
+
 cofreeCataT :: (Traversable f, Monad w) => (b -> f a -> w a) -> CofreeT f w b -> w a
 cofreeCataT f (CofreeT x) = do
   b CT.:< fct <- x
@@ -205,8 +244,6 @@ cofreeCataT f (CofreeT x) = do
 -- cata       :: Functor f => (     f a -> a) -> Fix    f   -> a
 -- cata       f x = f             $ fmap (cata       f) $ unFix  x
 --
--- cofreeCata :: Functor f => (b -> f a -> a) -> Cofree f b -> a
--- cofreeCata f x = f (extract x) $ fmap (cofreeCata f) $ unwrap x
 
 -- theWidgetFixed :: MonadWidget t m => Fix (Compose (Compose m (Dynamic t)) Ast)
 -- theWidgetFixed = ana
