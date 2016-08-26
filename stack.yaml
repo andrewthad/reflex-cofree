@@ -1,0 +1,42 @@
+# compiler: ghcjs-0.2.0.20151001_ghc-7.10.2
+# compiler-check: match-exact
+# setup-info:
+#   ghcjs:
+#     source:
+#       ghcjs-0.2.0.20151001_ghc-7.10.2:
+#         url: "https://github.com/fizruk/ghcjs/releases/download/v0.2.0.20151001/ghcjs-0.2.0.20151001.tar.gz"
+
+resolver: lts-5.8
+compiler: ghcjs-0.2.0.20160414_ghc-7.10.3
+compiler-check: match-exact
+setup-info:
+  ghcjs:
+    source:
+      ghcjs-0.2.0.20160414_ghc-7.10.3:
+        url: https://s3.amazonaws.com/ghcjs/ghcjs-0.2.0.20160414_ghc-7.10.3.tar.gz
+        sha1: 6d6f307503be9e94e0c96ef1308c7cf224d06be3
+
+# Local packages, usually specified by relative directory name
+packages:
+  - '.'
+  - location:
+      git:    'https://github.com/ghcjs/ghcjs-base'
+      commit: 'e9e9e36afde694202de034905efdeef153e1b04d'
+    extra-dep: true
+
+# Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
+extra-deps:
+  - 'ghcjs-dom-0.2.3.1'
+  - 'jsaddle-0.3.0.3'
+  - 'reflex-0.4.0'
+  - 'reflex-dom-0.3'
+  - 'ref-tf-0.4'
+  - 'haskell-src-exts-1.16.0.1'
+  - 'syb-0.5.1'
+
+# Override default flag values for local packages and extra-deps
+flags: {}
+
+# Extra package databases containing global packages
+extra-package-dbs: []
+
